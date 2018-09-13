@@ -1,0 +1,25 @@
+# Quick Demo of Docker's Multi Stage Build
+# Based on: http://training.play-with-docker.com/multi-stage/
+
+# Build the app
+FROM golang:1.10.3 as builder
+COPY hello-world.go .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o hello-world hello-world.go
+
+FROM golang:1.10.3 as checker
+COPY health-check.go .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o health-check health-check.go
+
+FROM alpine:3.8 as userbase
+RUN addgroup -g 1001 -S scratcher
+RUN adduser -u 1001 -S scratcher -G scratcher
+
+# Copy the app into the smallest possible image
+FROM scratch
+COPY --from=builder /go/hello-world /
+COPY --from=checker /go/health-check /
+COPY --from=userbase /etc/passwd /etc/passwd
+EXPOSE 8080
+USER nobody
+HEALTHCHECK --interval=1s --timeout=1s --start-period=2s --retries=3 CMD [ "/health-check" ]
+CMD ["/hello-world"]
